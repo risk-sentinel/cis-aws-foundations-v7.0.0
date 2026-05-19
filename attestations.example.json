@@ -1,0 +1,72 @@
+{
+  "plugins": {
+    "inspec-reporter-json-hdf": {
+      "attestations": [
+        {
+          "control_id": "C-2.1.1",
+          "explanation": "TEMPLATE — fill in: reviewed AWS Organizations management account configuration on YYYY-MM-DD. Confirmed centralized root access management state via IAM > Root access management dashboard. If enabled, captured the configured delegated administrator account ID and the set of root-credential management policies in scope. Evidence: <screenshot URL, document reference, or ticket ID>.",
+          "frequency": "annually",
+          "status": "passed",
+          "updated": "TEMPLATE-YYYY-MM-DD",
+          "updated_by": "TEMPLATE — <Reviewer Name>, <Role / Title>"
+        },
+        {
+          "control_id": "C-2.1.2",
+          "explanation": "TEMPLATE — fill in: reviewed AWS Organizations SCP / RCP attachments on YYYY-MM-DD. Confirmed that baseline guardrail authorization policies are attached to all active member accounts directly or via OU/root inheritance. Captured the policy IDs, target IDs, and effective inheritance chain. Evidence: aws-cli list-policies / list-policies-for-target output, or screenshot of Organizations console.",
+          "frequency": "annually",
+          "status": "passed",
+          "updated": "TEMPLATE-YYYY-MM-DD",
+          "updated_by": "TEMPLATE — <Reviewer Name>, <Role / Title>"
+        },
+        {
+          "control_id": "C-2.1.5",
+          "explanation": "TEMPLATE — fill in: reviewed AWS Organizations delegated administrator registrations for centralized root credentials management on YYYY-MM-DD. Confirmed the delegated admin account is a security/management-focused account, not a workload account. Evidence: Organizations console > Services or aws organizations list-delegated-administrators output.",
+          "frequency": "annually",
+          "status": "passed",
+          "updated": "TEMPLATE-YYYY-MM-DD",
+          "updated_by": "TEMPLATE — <Reviewer Name>, <Role / Title>"
+        },
+        {
+          "control_id": "C-2.1.6",
+          "explanation": "TEMPLATE — fill in: reviewed integrated-service delegated administrator registrations on YYYY-MM-DD. Confirmed that integrated services (CloudTrail, Security Hub, GuardDuty, etc.) have their administrative functions delegated out of the management account to dedicated security accounts. Evidence: per-service delegated-administrator console screenshots or aws-cli output.",
+          "frequency": "annually",
+          "status": "passed",
+          "updated": "TEMPLATE-YYYY-MM-DD",
+          "updated_by": "TEMPLATE — <Reviewer Name>, <Role / Title>"
+        },
+        {
+          "control_id": "C-2.1.3",
+          "explanation": "TEMPLATE — fill in: workload inventory of the AWS Organizations management account on YYYY-MM-DD. Confirmed no production / customer-facing workloads run in the management account; only governance / security tooling (org-wide CloudTrail, Config aggregator, etc.). Evidence: AWS Config aggregator query results, CMDB / asset inventory snapshot, or CSPM tool output.",
+          "frequency": "annually",
+          "status": "passed",
+          "updated": "TEMPLATE-YYYY-MM-DD",
+          "updated_by": "TEMPLATE — <Reviewer Name>, <Role / Title>"
+        },
+        {
+          "control_id": "C-2.1.4",
+          "explanation": "TEMPLATE — fill in: reviewed Organizational Unit taxonomy on YYYY-MM-DD. Confirmed OUs are structured by environment (prod / non-prod) and data sensitivity (regulated / standard). Captured the OU tree + the documented taxonomy decision. Evidence: Organizations console screenshot + the published OU taxonomy document.",
+          "frequency": "annually",
+          "status": "passed",
+          "updated": "TEMPLATE-YYYY-MM-DD",
+          "updated_by": "TEMPLATE — <Reviewer Name>, <Role / Title>"
+        },
+        {
+          "control_id": "C-2.19",
+          "explanation": "TEMPLATE — fill in: reviewed identity-provider architecture on YYYY-MM-DD. Confirmed IAM users are managed centrally via federation (IAM Identity Center, Okta SAML, Azure AD, etc.) — no per-account standalone IAM users for human access. Captured the IdP configuration + account-mapping documentation. Evidence: IdP console screenshot, account-to-permission-set assignment export.",
+          "frequency": "annually",
+          "status": "passed",
+          "updated": "TEMPLATE-YYYY-MM-DD",
+          "updated_by": "TEMPLATE — <Reviewer Name>, <Role / Title>"
+        },
+        {
+          "control_id": "C-3.1.3",
+          "explanation": "TEMPLATE — fill in: reviewed Macie classification coverage + finding-review cadence on YYYY-MM-DD. Confirmed Macie is enabled in all relevant regions, has scanned all in-scope S3 buckets, and findings are triaged regularly. Captured: number of buckets scanned, sensitive-data findings count + status, last-finding-review date. Evidence: Macie console screenshot or aws macie2 get-findings output + ticketing system review records.",
+          "frequency": "quarterly",
+          "status": "passed",
+          "updated": "TEMPLATE-YYYY-MM-DD",
+          "updated_by": "TEMPLATE — <Reviewer Name>, <Role / Title>"
+        }
+      ]
+    }
+  }
+}

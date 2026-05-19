@@ -1,0 +1,301 @@
+name: cis-aws-foundations
+title: AWS Foundations CIS Baseline
+maintainer: Risk Sentinel
+copyright: Risk Sentinel
+copyright_email: support@risk-sentinel.org
+license: Apache-2.0
+summary: |
+  Validates AWS accounts against CIS Amazon Web Services Foundations Benchmark v7.0.0.
+  Targets AWS Commercial (aws) and AWS GovCloud non-DoD (aws-us-gov).
+  Per-control partition applicability is documented in
+  partition_applicability.yml and encoded as `tag applicable_partitions:`.
+version: 0.1.0
+inspec_version: '>= 5.0'
+
+inputs:
+  - name: aws_partition
+    type: string
+    value: aws
+    description: >-
+      AWS partition the scan is running against.
+      One of: aws (Commercial), aws-us-gov (GovCloud non-DoD).
+
+  - name: root_mfa_requirement
+    type: string
+    value: hardware_required
+    description: >-
+      Policy for root-user MFA (CIS 2.6). One of:
+      - 'hardware_required' (default) — root must use a hardware MFA device.
+        Matches CIS Level 2 literally: passes only when MFA is enabled AND the
+        root MFA device is not the virtual 'root-account-mfa-device'.
+      - 'virtual_ok' — virtual MFA on root is acceptable. Passes when MFA is
+        enabled on root, regardless of device type. Use when hardware MFA is
+        impractical across many member accounts (per CIS 2.6 note about
+        logistical challenges).
+
+  - name: scan_regions
+    type: array
+    value: []
+    description: >-
+      Explicit region allowlist for region-scoped checks (IAM Access Analyzer
+      coverage at 2.18, multi-region CloudTrail enumeration at 4.8 / 4.9, and
+      any future per-region resource). Empty (default) = dynamic discovery via
+      compute_client.describe_regions — returns regions enabled in the target
+      account at scan time. Set to an explicit list to scope the scan.
+
+      Default auto-narrows to the target partition (Commercial returns
+      commercial regions; GovCloud returns us-gov-*). Set explicitly only when
+      you have a specific reason (scope to operationally-used regions,
+      accelerate dev scans, or pin to a regulator-audit-defined region set).
+
+      Trade-off: a narrow allowlist will NOT catch drift. If Access Analyzer
+      is disabled or a single-region trail is created in a non-listed region,
+      2.18 / 4.8 / 4.9 will not flag it. Prefer the empty default unless you
+      know exactly what you're excluding and why.
+
+  - name: iam_access_model
+    type: string
+    value: hybrid
+    description: >-
+      Declares how IAM users coexist with federated / IAM Identity Center
+      access in the target account. Drives additional enforcement on top of
+      the CIS baseline in access-model-sensitive controls (2.11, 2.12, and
+      others added later). The CIS baseline check runs identically in all
+      modes; this input only adds stricter checks, never relaxes them.
+      - 'pure_sso'   — human access is only via IAM Identity Center /
+                       federation. IAM users with console passwords should
+                       not exist; active long-lived access keys only exist
+                       for declared service accounts (see
+                       iam_service_account_usernames). Enables the stricter
+                       checks on top of CIS baseline.
+      - 'hybrid'     — IAM users coexist with federated access (a common
+                       transitional posture). CIS 2.x IAM-user controls
+                       enforce uniformly; no extras.
+      - 'legacy_iam' — IAM users are the primary access mechanism.
+                       Functionally identical to 'hybrid' in code; the tag
+                       exists so coverage narratives can distinguish it from
+                       hybrid when explaining residual risk to auditors.
+
+  - name: iam_service_account_usernames
+    type: array
+    value: []
+    description: >-
+      IAM usernames authorised to hold active long-lived access keys,
+      consulted only when iam_access_model == 'pure_sso'. Keys owned by a
+      username in this list are allowed to exist; CIS 2.12's 90-day-rotation
+      rule still applies regardless of membership. In 'hybrid' and
+      'legacy_iam' modes this input is ignored — CIS 2.12 enforces uniformly
+      for all users.
+
+  - name: root_user_recent_use_threshold_days
+    type: numeric
+    value: 90
+    description: >-
+      Days back to consider "recent" for CIS 2.7 (root user not used for
+      daily tasks). Default 90 — root used within the last 90 days fails
+      the control. Tighten / loosen per consumer policy.
+
+  - name: s3_mfa_delete_protection
+    type: boolean
+    value: true
+    description: >-
+      When true (default), C-3.1.2 enumerates every S3 bucket in this
+      account and asserts MFA Delete + Versioning are enabled on each,
+      excluding buckets in `s3_mfa_delete_excluded_buckets`. When false,
+      C-3.1.2 is marked Not Applicable (consumer has opted out of MFA
+      Delete enforcement — e.g., the bucket inventory is genuinely all
+      transient/scratch and MFA Delete's operational friction outweighs
+      the protection).
+
+  - name: s3_mfa_delete_excluded_buckets
+    type: array
+    value: []
+    description: >-
+      S3 bucket names to exclude from the C-3.1.2 MFA-Delete sweep
+      (consulted when s3_mfa_delete_protection is true). Use when a
+      bucket is known to be transient/scratch and MFA Delete's
+      operational cost outweighs the protection — e.g., dev/test
+      buckets, build artifacts, log-aggregation buckets where the
+      lifecycle policy already provides deletion controls. Document
+      the exclusion rationale outside the profile (e.g., a security
+      review record); each entry asserts that exclusion is intentional.
+
+  - name: vpc_peering_allowed_cidrs
+    type: hash
+    value: {}
+    description: >-
+      Per-VPC-peering allowlist of remote CIDRs that may appear in the
+      route table for the peering connection (CIS 6.6 — least-access
+      across VPC peerings). Hash keyed by peering-connection ID,
+      value = array of CIDR strings.
+      Example: { "pcx-0123": ["10.20.0.0/16"], "pcx-0456": ["10.30.0.0/16"] }
+      Default {} = skip with attestation rationale. Any peering whose
+      route-table targets a CIDR not in the listed set fails the control.
+
+  - name: required_vpc_endpoints
+    type: array
+    value: []
+    description: >-
+      AWS service names (e.g., 'com.amazonaws.us-east-1.s3') that must
+      be present as VPC Endpoints in every in-scope VPC (CIS 6.8 — keep
+      AWS-service traffic off the public internet). Default [] = skip
+      with attestation rationale. Listed services must have at least one
+      Available endpoint per VPC.
+
+  - name: security_hub_required
+    type: boolean
+    value: true
+    description: >-
+      When true (default), C-5.16 asserts AWS Security Hub is subscribed
+      in the scanner's region. When the account is not subscribed, the
+      control FAILS cleanly with the SDK's InvalidAccessException as the
+      failure rationale (no Inspec WARN emitted — the precheck swallows
+      the SDK error and converts it to a clean expectation failure).
+      Set to false when the consumer has documented an alternative SIEM
+      / aggregation pipeline (Splunk, Datadog, Wiz, etc.) and Security
+      Hub enrolment is intentionally out of scope. C-5.16 then becomes
+      Not Applicable; the consumer is expected to attest to the
+      alternative tool's coverage outside the InSpec profile.
+
+  - name: aws_organizations_role_arn
+    type: string
+    value: ''
+    description: >-
+      Optional ARN of a cross-account IAM role in the AWS Organizations
+      management (or delegated-administrator) account that the scanner
+      can assume to call mgmt-only APIs. When set, the dual-mode
+      controls (C-2.1.2 SCP/RCP enumeration, C-2.1.5 delegated-admin
+      listing, C-2.1.6 trusted-service registration) auto-validate via
+      AssumeRole + Organizations APIs. When empty (default), those
+      controls stay attestation-bound with a "requires management
+      context" skip rationale.
+
+      The role must trust the scanner's principal (typically the GitHub
+      Actions OIDC role or the EC2 self-hosted runner role) and grant:
+        - organizations:DescribeOrganization
+        - organizations:ListPolicies
+        - organizations:ListDelegatedAdministrators
+        - organizations:ListAWSServiceAccessForOrganization
+        - organizations:ListOrganizationalUnitsForParent (future)
+        - organizations:ListRoots (future)
+        - iam:ListOrganizationsFeatures (future)
+
+      Example: arn:aws:iam::111111111111:role/sparc-validate-org-reader
+
+  - name: c221_excluded_arns
+    type: array
+    value: []
+    description: >-
+      Resource ARNs to exempt from the CIS 2.21 wildcard-principal scan.
+      Match is exact-string against the resource ARN as reported by the
+      scanner (e.g.,
+      'arn:aws:s3:::public-cloudfront-origin',
+      'arn:aws:sns:us-east-1:123456789012:public-status-feed'). Use
+      sparingly: each entry asserts the consumer has reviewed the
+      resource's policy and accepts that Principal: "*" without a
+      restrictive Condition is intentional and adequately compensated
+      elsewhere (e.g., a public-by-design CloudFront-fronted origin, a
+      cross-account integration whose authorisation is enforced by the
+      consumer-side identity policy). Glob/prefix matching is
+      intentionally not supported — each exempted resource must be
+      named explicitly.
+
+  # ----- Logging architecture (CIS §4) -----
+  # Replaces the older `logging_strategy: aws_default | custom` machinery
+  # with explicit per-service mode + expected-destinations allowlist.
+  # Each §4 control validates against the consumer-declared architecture
+  # rather than skipping with a boundary-attestation rationale.
+
+  - name: cloudtrail_mode
+    type: string
+    value: organizational
+    description: >-
+      How CloudTrail logging is architected for this consumer's compliance
+      boundary. One of:
+      - 'individual' — each account has its own multi-region trail.
+      - 'organizational' (default) — a single org-trail in the management
+        account covers every member account via shadow-trail delivery;
+        member accounts have no local trail by design.
+      - 'hybrid' — both an org-trail AND per-account local trails.
+
+  - name: log_archive_account_id
+    type: string
+    value: ''
+    description: >-
+      AWS account ID (12-digit) that owns the centralized log destinations.
+      When set, controls use STS GetCallerIdentity to determine the scanner's
+      account role (log-archive vs. member) and adjust their assertions
+      accordingly. Empty (default) = no role inference; controls validate
+      allowlist matches only.
+
+  - name: expected_cloudtrail_destinations
+    type: array
+    value: []
+    description: >-
+      Source of truth for CloudTrail destination buckets / encryption keys.
+      Each entry (hash):
+        - bucket:        S3 bucket name (just the name, not an ARN)
+        - account_id:    12-digit account that owns the bucket
+        - kms_key:       KMS CMK ARN used for at-rest encryption (optional)
+        - is_org_trail:  true if this destination is fed by an org-trail
+      Example:
+        - bucket: sparc-cloudtrail-archive
+          account_id: '111111111111'
+          kms_key:  'arn:aws:kms:us-east-1:111111111111:key/abc-123'
+          is_org_trail: true
+      Default [] FAILS C-4.1 / C-4.2 / C-4.4 / C-4.5 when trails are detected
+      (per the consumer-must-document semantic). Populate with at least one
+      entry matching the consumer's actual CloudTrail architecture.
+
+  - name: aws_config_mode
+    type: string
+    value: organizational
+    description: >-
+      AWS Config aggregation architecture. One of:
+      - 'individual' — each account runs its own Config recorder + delivery channel.
+      - 'organizational' (default) — a single aggregator (Config aggregator or
+        delegated-admin recorder) covers all member accounts.
+      - 'hybrid' — both.
+
+  - name: expected_config_destinations
+    type: array
+    value: []
+    description: >-
+      Source of truth for AWS Config destinations. Each entry (hash):
+        - bucket:        S3 bucket name receiving Config snapshots
+        - account_id:    12-digit owner account
+        - sns_topic:     SNS topic ARN for change notifications (optional)
+        - is_aggregator: true if this destination is fed by an organization
+                         aggregator / delegated-admin recorder
+      Default [] FAILS C-4.3 when any Config recorder is detected.
+
+  - name: vpc_flow_logs_mode
+    type: string
+    value: local
+    description: >-
+      VPC Flow Logs architecture. One of:
+      - 'local' (default) — each VPC writes flow logs to a destination in
+        its own account.
+      - 'aggregated' — VPCs write to a centralized cross-account
+        destination (S3 bucket in log-archive or shared CloudWatch group).
+
+  - name: expected_vpc_flow_log_destinations
+    type: array
+    value: []
+    description: >-
+      Source of truth for VPC Flow Log destinations. Each entry (hash):
+        - destination_type: 's3' | 'cloud-watch-logs' | 'kinesis-data-firehose'
+        - destination:      ARN of the destination (S3 bucket ARN, CW log
+                            group ARN, or Firehose stream ARN)
+        - traffic_type:     'ALL' | 'ACCEPT' | 'REJECT'
+      Each VPC must have at least one flow log whose destination AND traffic
+      type appear in the allowlist. Default [] FAILS C-4.7 when any VPC exists.
+
+supports:
+  - platform: aws
+
+depends:
+  - name: inspec-aws
+    git: https://github.com/inspec/inspec-aws.git
+    branch: main
+    # TODO: pin to a tag after first green CI run.

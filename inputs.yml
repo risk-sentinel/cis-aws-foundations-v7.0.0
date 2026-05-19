@@ -1,0 +1,110 @@
+# Consumer inputs for cis-aws-foundations.
+#
+# Override values per-environment via:
+#   cinc-auditor exec profiles/cis-aws-foundations \
+#     --input-file profiles/cis-aws-foundations/inputs.yml
+# or individually via --input name=value
+#
+# All inputs have sensible defaults — see inspec.yml for the catalogue
+# (types, defaults, per-value behaviour) and README.md "Portability"
+# for how each input composes. Real consumer overlays exist at
+# `examples/sparc.inputs.yml` (and any future contributed examples)
+# as a starting template.
+
+# ----- AWS partition -----
+# 'aws' for Commercial (default), 'aws-us-gov' for GovCloud non-DoD.
+aws_partition: aws
+
+# ----- Root MFA policy (CIS 2.6) -----
+# Default 'hardware_required' matches CIS Level 2 literal: root must use a
+# hardware MFA device. Uncomment to relax to 'virtual_ok' where hardware
+# MFA is impractical across many accounts (per CIS 2.6 logistical caveat).
+# root_mfa_requirement: virtual_ok
+
+# ----- Region scope for region-iterating checks -----
+# Default [] discovers regions dynamically via ec2:DescribeRegions (auto-
+# narrows to the target partition). Uncomment to pin the scan to an
+# explicit allowlist — faster, but will NOT catch drift in excluded
+# regions (see 2.18 / 4.8 / 4.9 coverage).
+# scan_regions:
+#   - us-east-1
+#   - us-west-2
+
+# ----- Access-model (CIS 2.11 / 2.12 stricter enforcement) -----
+# Default 'hybrid' = IAM users coexist with federated access.
+# 'pure_sso' adds stricter describes (no IAM users with console
+# passwords, active keys only for declared service accounts).
+# 'legacy_iam' is functionally identical to hybrid in code; the tag
+# distinguishes it for coverage-narrative honesty. CIS baseline
+# enforces uniformly in all three modes.
+# iam_access_model: pure_sso
+
+# Consulted only when iam_access_model == 'pure_sso'. Usernames of IAM
+# principals authorised to hold active long-lived access keys (CI/CD,
+# break-glass). CIS 2.12's 90-day-rotation rule still applies to listed
+# usernames.
+# iam_service_account_usernames:
+#   - cicd-deployer
+#   - terraform-runner
+
+# ----- CIS 2.21 wildcard-principal scan exemptions -----
+# Resource ARNs to exempt from the cross-resource Principal: "*" scan.
+# Default [] = no exemptions (the scan flags every wildcard-without-
+# Condition statement across S3, KMS, Secrets Manager, SQS, SNS, and
+# Lambda). Add ARNs only when the consumer has reviewed the resource
+# and accepts that the open principal is intentional and adequately
+# compensated elsewhere. Exact-ARN match — no wildcards.
+# c221_excluded_arns:
+#   - arn:aws:s3:::public-cloudfront-origin
+#   - arn:aws:sns:us-east-1:123456789012:public-status-feed
+
+# ----- Logging architecture (CIS §4) -----
+# Each §4 control validates against the architecture the consumer
+# declares here. Empty destination allowlists FAIL the relevant control
+# when matching resources are detected — consumers must document the
+# architecture explicitly.
+
+# cloudtrail_mode: organizational    # individual | organizational | hybrid
+
+# log_archive_account_id: '111111111111'  # 12-digit ID of the log-archive
+                                          # account. When set, the scan uses
+                                          # STS to determine if this account
+                                          # IS the log archive vs. a member.
+
+# expected_cloudtrail_destinations:
+#   - bucket: sparc-cloudtrail-archive
+#     account_id: '111111111111'
+#     kms_key:  'arn:aws:kms:us-east-1:111111111111:key/abc-123'
+#     is_org_trail: true
+
+# aws_config_mode: organizational
+
+# expected_config_destinations:
+#   - bucket: sparc-config-archive
+#     account_id: '111111111111'
+#     sns_topic: 'arn:aws:sns:us-east-1:111111111111:config-events'
+#     is_aggregator: true
+
+# vpc_flow_logs_mode: local           # local | aggregated
+
+# expected_vpc_flow_log_destinations:
+#   - destination_type: cloud-watch-logs
+#     destination: 'arn:aws:logs:us-east-1:222222222222:log-group:vpc-flow-logs'
+#     traffic_type: ALL
+
+# ----- AWS Security Hub (CIS 5.16) -----
+# Default true = control runs; FAILS cleanly (no Inspec WARN) when the
+# account is not subscribed to Security Hub. Set to false when the
+# consumer has documented an alternative SIEM / aggregation pipeline
+# (Splunk, Datadog, Wiz, …) and Security Hub enrolment is intentionally
+# out of scope. C-5.16 then becomes Not Applicable.
+# security_hub_required: false
+
+# ----- AWS Organizations dual-mode (CIS 2.1.2 / 2.1.5 / 2.1.6) -----
+# ARN of a cross-account IAM role in the Organizations management (or
+# delegated-administrator) account that the scanner can assume to call
+# mgmt-only APIs (ListPolicies, ListDelegatedAdministrators,
+# ListAWSServiceAccessForOrganization). When set, the dual-mode
+# controls auto-validate; when empty (default), they stay attestation
+# with a "requires management context" skip.
+# aws_organizations_role_arn: 'arn:aws:iam::111111111111:role/sparc-validate-org-reader'

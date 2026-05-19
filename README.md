@@ -110,12 +110,12 @@ Two values:
 
 ```yaml
 logging_requirements:
-  log_group_arn_prefix: "arn:aws:logs:us-east-1:752531709667:log-group:CloudTrail"
+  log_group_arn_prefix: "arn:aws:logs:us-east-1:123456789012:log-group:CloudTrail"
   retention_days: 365
   required_metric_filters: ["5.1", "5.7", "5.16"]
   metric_filter_overrides:
     "5.7":
-      log_group_arn_prefix: "arn:aws:logs:us-east-1:752531709667:log-group:CloudTrail-Console"
+      log_group_arn_prefix: "arn:aws:logs:us-east-1:123456789012:log-group:CloudTrail-Console"
     "5.16":
       hub_arn: "arn:aws:securityhub:us-east-1:999999999999:hub/default"   # delegated-admin hub
 ```
@@ -186,7 +186,6 @@ Subset still marked as attestation:
 The 8 attestation-bound controls use the SAF CLI / CMSgov attestation pattern. The profile ships:
 
 - **`attestations.example.json`** — generic SAF-format JSON template; consumers fork this and fill in real reviewer / date / evidence values.
-- **`examples/sparc.attestations.example.json`** — SPARC consumer-overlay template (still placeholder-only — owner work to fill in).
 
 `attestation_category` routes to team queues per `docs/dev/Attestation_Strategy.md` "Categorization for team routing":
 
